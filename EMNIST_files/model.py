@@ -1,5 +1,4 @@
-from datetime import time
-
+import time
 import numpy as np
 import torch
 from torch import nn, functional
@@ -98,7 +97,7 @@ class EMNIST_model:
         loss = loss_function()
 
         if verbose:
-            print(f"Training on {len(x)} examples, validating on {len(validation_x)} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'} model path: {model_path} \n\tdevice: {self.device}, loss function: {loss_function},\n\toptimizer: {optimizer}\n\n")
+            print(f"Training on {len(x)} examples, validating on {len(validation_x)} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'}, model path: {model_path} \n\tdevice: {self.device}, loss function: {loss.__class__.__name__},\n\toptimizer: {optimizer.__class__.__name__}\n\n")
 
         last_improvement_epoch = 0
         last_best_result = 0 if validation_metric_accuracy else 100000000.0
@@ -113,6 +112,7 @@ class EMNIST_model:
             mean_validation_loss = 0
             num_batches_train = 0
             num_batches_validation = 0
+
             for batch in data_loader_train_set:
                 batch_x, batch_y = batch
                 predictions_onehot = self.model(batch_x)
@@ -156,12 +156,12 @@ class EMNIST_model:
                 is_better = current_result < last_best_result
 
             if verbose:
-                print(f"\nEpoch: {epoch}, time: {seconds_end - seconds_begin}\n\taccuracy: {train_accuracy}, loss: {mean_training_loss}, num: {x.size()}\n\tvalidation_accuracy: {validation_accuracy}, validation loss: {mean_validation_loss}, validation_num: {validation_x.size()}")
+                print(f"\nEpoch: {epoch}, time: {(seconds_end - seconds_begin):.3f}\n\taccuracy: {train_accuracy:.3f}, loss: {mean_training_loss:.3f}\n\tvalidation_accuracy: {validation_accuracy:.3f}, validation loss: {mean_validation_loss:.3f}")
                 if is_better:
                     print(
-                        f"\n\timproved from {last_best_result} (epoch {last_improvement_epoch}) to {current_result} (epoch {epoch})")
+                        f"\n\timproved from {last_best_result:.3f} (epoch {last_improvement_epoch}) to {current_result:.3f} (epoch {epoch})")
                 else:
-                    print(f"\n\tnot improved from {last_best_result} (epoch {last_improvement_epoch})")
+                    print(f"\n\tnot improved from {last_best_result:.3f} (epoch {last_improvement_epoch})")
 
             if is_better:
                 last_best_result = current_result
@@ -173,7 +173,7 @@ class EMNIST_model:
         self.load(model_path)
 
         if verbose:
-            print(f"\n\nTraining finished. Best result: {last_best_result} (epoch {last_improvement_epoch})")
+            print(f"\n\nTraining finished. Best result: {last_best_result:.3f} (epoch {last_improvement_epoch})")
 
 
 

@@ -75,15 +75,12 @@ class DataPreparation:
         scale_change = 1 + random.uniform(-scale_change_range_percentage, scale_change_range_percentage)
 
         image = np.transpose(image, (2, 1, 0))
-        #self.print_console_image(np.transpose(image, (2, 1, 0)))
-
-        image = self.rotate_and_maintain_size(image, rotate_angle)
-        #self.print_console_image(np.transpose(image, (2, 1, 0)))
-        image = self.resize_and_maintain_size(image, scale_change)
-        #self.print_console_image(np.transpose(image, (2, 1, 0)))
-        image = self.shift_and_maintain_size(image, shift_x, shift_y)
-        #self.print_console_image(np.transpose(image, (2, 1, 0)))
-
+        if scale_change_range_percentage > 0 and scale_change != 1:
+            image = self.resize_and_maintain_size(image, scale_change)
+        if rotation_angle_range_degrees > 0 and rotate_angle != 0:
+            image = self.rotate_and_maintain_size(image, rotate_angle)
+        if shift_range_percent > 0 and (shift_x != 0 or shift_y != 0):
+            image = self.shift_and_maintain_size(image, shift_x, shift_y)
         image = np.transpose(image, (2, 1, 0))
         return image
 
@@ -141,3 +138,15 @@ class DataPreparation:
                                                  (0, 0)),
                                   mode='edge')
         return zoomed_image
+
+    def get_percentage_of_data(self, x, y, percentage):
+        if percentage == 1:
+            return x, y
+        else:
+            x_result = []
+            y_result = []
+            for i in range(len(x)):
+                if random.uniform(0, 1) < percentage:
+                    x_result.append(x[i])
+                    y_result.append(y[i])
+            return np.array(x_result), np.array(y_result)
