@@ -1,7 +1,7 @@
 from torch import nn
 
 
-class ModelArchitecture_v1(nn.model):
+class ModelArchitecture_v1(nn.Module):
     def __init__(self, input_channels, x_size, y_size, number_of_classes, dropout_conv=0.25, dropout_linear=0.5):
         super(ModelArchitecture_v1, self).__init__()
 

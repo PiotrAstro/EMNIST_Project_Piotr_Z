@@ -1,3 +1,5 @@
+from datetime import time
+
 import numpy as np
 import torch
 from torch import nn, functional
@@ -5,10 +7,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 
 class EMNIST_model:
-    def __init__(self, x_size, y_size, number_of_classes, model, default_batch_size=64, default_model_path="EMNIST_model.pt"):
+    def __init__(self, number_of_classes, model, default_batch_size=64, default_model_path="EMNIST_model.pt"):
         self.model = model
-        self.x_size = x_size
-        self.y_size = y_size
         self.number_of_classes = number_of_classes
         self.default_batch_size = default_batch_size
         self.default_model_path = default_model_path
@@ -30,9 +30,11 @@ class EMNIST_model:
             path = self.default_model_path
         self.model.load_state_dict(torch.load(path))
 
-    def predict(self, x):
+    def predict(self, x, batch_size=0):
+        if batch_size == 0:
+            batch_size = self.default_batch_size
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
-        data_loader = DataLoader(x, batch_size=self.default_batch_size)
+        data_loader = DataLoader(x, batch_size=batch_size)
         predictions = []
         with torch.no_grad():
             for batch in data_loader:
@@ -43,10 +45,12 @@ class EMNIST_model:
         x = np.array([x])
         return self.predict(x)[0]
 
-    def evaluate(self, x, y, verbose=True, loss_function=nn.CrossEntropyLoss):
+    def evaluate(self, x, y, verbose=True, loss_function=nn.CrossEntropyLoss, batch_size=0):
+        if batch_size == 0:
+            batch_size = self.default_batch_size
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
         y = torch.tensor(y, dtype=torch.long).to(self.device)
-        data_loader = DataLoader(TensorDataset(x, y), batch_size=self.default_batch_size)
+        data_loader = DataLoader(TensorDataset(x, y), batch_size=batch_size)
 
         loss = loss_function()
         correct = 0
@@ -71,9 +75,15 @@ class EMNIST_model:
         return accuracy, mean_loss
 
 
-    def train(self, x, y, validation_x, validation_y, max_epochs_number=100, stop_after_no_improvement=5, batch_size=64,
+    def train(self, x, y, validation_x, validation_y, max_epochs_number=100, stop_after_no_improvement=5, batch_size=0,
               loss_function=nn.CrossEntropyLoss, optimizer=torch.optim.Adam, learning_rate=0.001, verbose=True,
-              validation_metric_accuracy=True):
+              validation_metric_accuracy=True, model_path=None):
+        if batch_size == 0:
+            batch_size = self.default_batch_size
+
+        if model_path is None:
+            model_path = self.default_model_path
+
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
         y = torch.tensor(y, dtype=torch.long).to(self.device)
         validation_x = torch.tensor(validation_x, dtype=torch.float32).to(self.device)
@@ -86,10 +96,15 @@ class EMNIST_model:
 
         optimizer = optimizer(self.model.parameters(), lr=learning_rate)
         loss = loss_function()
+
+        if verbose:
+            print(f"Training on {len(x)} examples, validating on {len(validation_x)} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'} model path: {model_path} \n\tdevice: {self.device}, loss function: {loss_function},\n\toptimizer: {optimizer}\n\n")
+
         last_improvement_epoch = 0
         last_best_result = 0 if validation_metric_accuracy else 100000000.0
         for epoch in range(max_epochs_number):
             self.model.train()
+            seconds_begin = time.time()
             correct_train = 0
             total_train = 0
             correct_validation = 0
@@ -125,6 +140,8 @@ class EMNIST_model:
                     mean_validation_loss += validation_loss_value.item()
                     num_batches_validation += 1
 
+            seconds_end = time.time()
+
             mean_training_loss /= num_batches_train
             mean_validation_loss /= num_batches_validation
 
@@ -139,7 +156,7 @@ class EMNIST_model:
                 is_better = current_result < last_best_result
 
             if verbose:
-                print(f"\nEpoch: {epoch}\n\taccuracy: {train_accuracy}, loss: {mean_training_loss}, num: {x.size()}\n\tvalidation_accuracy: {validation_accuracy}, validation loss: {mean_validation_loss}, validation_num: {validation_x.size()}")
+                print(f"\nEpoch: {epoch}, time: {seconds_end - seconds_begin}\n\taccuracy: {train_accuracy}, loss: {mean_training_loss}, num: {x.size()}\n\tvalidation_accuracy: {validation_accuracy}, validation loss: {mean_validation_loss}, validation_num: {validation_x.size()}")
                 if is_better:
                     print(
                         f"\n\timproved from {last_best_result} (epoch {last_improvement_epoch}) to {current_result} (epoch {epoch})")
@@ -149,9 +166,11 @@ class EMNIST_model:
             if is_better:
                 last_best_result = current_result
                 last_improvement_epoch = epoch
-                self.save()
+                self.save(model_path)
             elif epoch - last_improvement_epoch > stop_after_no_improvement:
                 break
+
+        self.load(model_path)
 
         if verbose:
             print(f"\n\nTraining finished. Best result: {last_best_result} (epoch {last_improvement_epoch})")
