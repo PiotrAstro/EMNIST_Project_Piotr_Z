@@ -1,3 +1,4 @@
+import pandas as pd
 from scipy.ndimage import rotate, zoom, shift
 
 import numpy as np
@@ -152,3 +153,14 @@ class DataPreparation:
             return np.array(x_result), np.array(y_result)
         else:
             return x[:int(len(x) * percentage)], y[:int(len(y) * percentage)]
+
+    def save_test_predictions(self, y, save_path):
+        # Assuming 'y' is a list or numpy array of predictions, where each prediction is a class label
+        # Create a DataFrame with an index column and a column for class predictions
+        data_frame = pd.DataFrame({
+            'index': range(len(y)),
+            'class': y
+        })
+
+        # Save the DataFrame to a CSV file
+        data_frame.to_csv(save_path, index=False, header=True)

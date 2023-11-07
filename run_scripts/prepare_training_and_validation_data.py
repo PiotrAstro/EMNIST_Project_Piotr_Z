@@ -1,5 +1,5 @@
 from constants import *
-from EMNIST_files.data_preparation import DataPreparation
+from EMNIST_classes.data_preparation import DataPreparation
 
 # data preparation
 data_preparation = DataPreparation(CHANNEL_NUMBER, X_SIZE, Y_SIZE, NUMBER_OF_CLASSES)

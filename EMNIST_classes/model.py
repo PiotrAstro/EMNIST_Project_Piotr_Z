@@ -1,5 +1,7 @@
 import os
 import time
+from math import ceil
+
 import numpy as np
 import pandas as pd
 import torch
@@ -39,6 +41,8 @@ class EMNIST_model:
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
         data_loader = DataLoader(x, batch_size=batch_size)
         predictions = []
+
+        self.model.eval()
         with torch.no_grad():
             for batch in data_loader:
                 predictions.extend(self.model(batch).cpu().numpy().argmax(axis=1))
@@ -92,6 +96,11 @@ class EMNIST_model:
         if log_path is None:
             log_path = self.default_log_path
 
+        train_size = len(x)
+        validation_size = len(y)
+        train_num_batches = int(ceil(train_size / batch_size))
+        validation_num_batches = int(ceil(validation_size / batch_size))
+
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
         y = torch.tensor(y, dtype=torch.long).to(self.device)
         validation_x = torch.tensor(validation_x, dtype=torch.float32).to(self.device)
@@ -106,7 +115,7 @@ class EMNIST_model:
         loss = loss_function()
 
         if verbose:
-            print(f"Training on {len(x)} examples, validating on {len(validation_x)} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'}, model path: {model_path} \n\tdevice: {self.device}, loss function: {loss.__class__.__name__},\n\toptimizer: {optimizer.__class__.__name__}, log path: {log_path}\n\n")
+            print(f"Training on {train_size} examples, validating on {validation_size} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'}, model path: {model_path} \n\tdevice: {self.device}, loss function: {loss.__class__.__name__},\n\toptimizer: {optimizer.__class__.__name__}, log path: {log_path}\n\n")
 
         last_improvement_epoch = 0
         last_best_result = 0 if validation_metric_accuracy else 100000000.0
@@ -114,13 +123,9 @@ class EMNIST_model:
             self.model.train()
             seconds_begin = time.time()
             correct_train = 0
-            total_train = 0
             correct_validation = 0
-            total_validation = 0
             mean_training_loss = 0
             mean_validation_loss = 0
-            num_batches_train = 0
-            num_batches_validation = 0
 
             for batch in data_loader_train_set:
                 batch_x, batch_y = batch
@@ -131,10 +136,8 @@ class EMNIST_model:
                 optimizer.zero_grad()
                 # accuracy calculation
                 _, predicted = torch.max(predictions_onehot.data, 1)
-                total_train += batch_y.size(0)
                 correct_train += (predicted == batch_y).sum().item()
                 mean_training_loss += train_loss_value.item()
-                num_batches_train += 1
 
             self.model.eval()
             with torch.no_grad():
@@ -144,18 +147,16 @@ class EMNIST_model:
                     validation_loss_value = loss(predictions_onehot, batch_y)
                     # accuracy calculation
                     _, predicted = torch.max(predictions_onehot.data, 1)
-                    total_validation += batch_y.size(0)
                     correct_validation += (predicted == batch_y).sum().item()
                     mean_validation_loss += validation_loss_value.item()
-                    num_batches_validation += 1
 
             seconds_end = time.time()
 
-            mean_training_loss /= num_batches_train
-            mean_validation_loss /= num_batches_validation
+            mean_training_loss /= train_num_batches
+            mean_validation_loss /= validation_num_batches
 
-            train_accuracy = float(correct_train) / total_train
-            validation_accuracy = float(correct_validation) / total_validation
+            train_accuracy = float(correct_train) / train_size
+            validation_accuracy = float(correct_validation) / validation_size
 
 
             if validation_metric_accuracy:
@@ -177,9 +178,10 @@ class EMNIST_model:
                 "saved_during_training": 1 if is_better else 0
             }])
             log_df = pd.concat([log_df, new_row_df], ignore_index=True)
+            log_df.to_csv(log_path, index=False)
 
             if verbose:
-                print(f"\nEpoch: {epoch}, time: {(seconds_end - seconds_begin):.3f}\n\taccuracy: {train_accuracy:.3f}, loss: {mean_training_loss:.3f}\n\tvalidation_accuracy: {validation_accuracy:.3f}, validation loss: {mean_validation_loss:.3f}")
+                print(f"\nEpoch: {epoch}, time: {(seconds_end - seconds_begin):.3f} seconds\n\taccuracy: {train_accuracy:.3f}, loss: {mean_training_loss:.3f}\n\tvalidation_accuracy: {validation_accuracy:.3f}, validation loss: {mean_validation_loss:.3f}")
                 if is_better:
                     print(
                         f"\n\timproved from {last_best_result:.3f} (epoch {last_improvement_epoch}) to {current_result:.3f} (epoch {epoch})")
@@ -194,7 +196,6 @@ class EMNIST_model:
                 break
 
         self.load_weights(model_path)
-        log_df.to_csv(log_path, index=False)
 
         if verbose:
             print(f"\n\nTraining finished. Best result: {last_best_result:.3f} (epoch {last_improvement_epoch})")
