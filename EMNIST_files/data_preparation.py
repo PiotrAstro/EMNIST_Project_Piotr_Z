@@ -139,10 +139,10 @@ class DataPreparation:
                                   mode='edge')
         return zoomed_image
 
-    def get_percentage_of_data(self, x, y, percentage):
-        if percentage == 1:
+    def get_percentage_of_data(self, x, y, percentage, shuffle=True):
+        if percentage >= 1:
             return x, y
-        else:
+        if shuffle:
             x_result = []
             y_result = []
             for i in range(len(x)):
@@ -150,3 +150,5 @@ class DataPreparation:
                     x_result.append(x[i])
                     y_result.append(y[i])
             return np.array(x_result), np.array(y_result)
+        else:
+            return x[:int(len(x) * percentage)], y[:int(len(y) * percentage)]

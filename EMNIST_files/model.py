@@ -1,16 +1,19 @@
+import os
 import time
 import numpy as np
+import pandas as pd
 import torch
 from torch import nn, functional
 from torch.utils.data import DataLoader, TensorDataset
 
 
 class EMNIST_model:
-    def __init__(self, number_of_classes, model, default_batch_size=64, default_model_path="EMNIST_model.pt"):
+    def __init__(self, number_of_classes, model, default_batch_size=64, default_model_path="EMNIST_model.pt", default_log_path="EMNIST_log.txt"):
         self.model = model
         self.number_of_classes = number_of_classes
         self.default_batch_size = default_batch_size
         self.default_model_path = default_model_path
+        self.default_log_path = default_log_path
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -19,15 +22,16 @@ class EMNIST_model:
             self.device = torch.device("cpu")
             self.model.to(self.device)
 
-    def save(self, path=None):
+    def save_weights(self, path=None):
         if path is None:
             path = self.default_model_path
         torch.save(self.model.state_dict(), path)
 
-    def load(self, path=None):
+    def load_weights(self, path=None):
         if path is None:
             path = self.default_model_path
-        self.model.load_state_dict(torch.load(path))
+        if os.path.exists(path):
+            self.model.load_state_dict(torch.load(path))
 
     def predict(self, x, batch_size=0):
         if batch_size == 0:
@@ -37,8 +41,8 @@ class EMNIST_model:
         predictions = []
         with torch.no_grad():
             for batch in data_loader:
-                predictions.extend(self.model(batch).cpu().numpy().max(axis=1))
-        return predictions
+                predictions.extend(self.model(batch).cpu().numpy().argmax(axis=1))
+        return np.array(predictions)
 
     def predict_sinle_input(self, x):
         x = np.array([x])
@@ -76,12 +80,17 @@ class EMNIST_model:
 
     def train(self, x, y, validation_x, validation_y, max_epochs_number=100, stop_after_no_improvement=5, batch_size=0,
               loss_function=nn.CrossEntropyLoss, optimizer=torch.optim.Adam, learning_rate=0.001, verbose=True,
-              validation_metric_accuracy=True, model_path=None):
+              validation_metric_accuracy=True, model_path=None, log_path=None):
+        log_df = pd.DataFrame(columns=["epoch", "train_accuracy", "train_loss", "validation_accuracy", "validation_loss", "time", "number_of_training_examples", "number_of_validation_examples", "saved_during_training"])
+
         if batch_size == 0:
             batch_size = self.default_batch_size
 
         if model_path is None:
             model_path = self.default_model_path
+
+        if log_path is None:
+            log_path = self.default_log_path
 
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
         y = torch.tensor(y, dtype=torch.long).to(self.device)
@@ -97,7 +106,7 @@ class EMNIST_model:
         loss = loss_function()
 
         if verbose:
-            print(f"Training on {len(x)} examples, validating on {len(validation_x)} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'}, model path: {model_path} \n\tdevice: {self.device}, loss function: {loss.__class__.__name__},\n\toptimizer: {optimizer.__class__.__name__}\n\n")
+            print(f"Training on {len(x)} examples, validating on {len(validation_x)} examples,\n\tbatch size: {batch_size}, max epochs number: {max_epochs_number},\n\tstop after no improvement: {stop_after_no_improvement}, learning rate: {learning_rate} \n\tvalidation metric: {'accuracy' if validation_metric_accuracy else 'loss'}, model path: {model_path} \n\tdevice: {self.device}, loss function: {loss.__class__.__name__},\n\toptimizer: {optimizer.__class__.__name__}, log path: {log_path}\n\n")
 
         last_improvement_epoch = 0
         last_best_result = 0 if validation_metric_accuracy else 100000000.0
@@ -148,12 +157,26 @@ class EMNIST_model:
             train_accuracy = float(correct_train) / total_train
             validation_accuracy = float(correct_validation) / total_validation
 
+
             if validation_metric_accuracy:
                 current_result = validation_accuracy
                 is_better = current_result > last_best_result
             else:
                 current_result = mean_validation_loss
                 is_better = current_result < last_best_result
+
+            new_row_df = pd.DataFrame([{
+                "epoch": epoch,
+                "train_accuracy": train_accuracy,
+                "train_loss": mean_training_loss,
+                "validation_accuracy": validation_accuracy,
+                "validation_loss": mean_validation_loss,
+                "time": (seconds_end - seconds_begin),
+                "number_of_training_examples": len(x),
+                "number_of_validation_examples": len(validation_x),
+                "saved_during_training": 1 if is_better else 0
+            }])
+            log_df = pd.concat([log_df, new_row_df], ignore_index=True)
 
             if verbose:
                 print(f"\nEpoch: {epoch}, time: {(seconds_end - seconds_begin):.3f}\n\taccuracy: {train_accuracy:.3f}, loss: {mean_training_loss:.3f}\n\tvalidation_accuracy: {validation_accuracy:.3f}, validation loss: {mean_validation_loss:.3f}")
@@ -166,16 +189,24 @@ class EMNIST_model:
             if is_better:
                 last_best_result = current_result
                 last_improvement_epoch = epoch
-                self.save(model_path)
+                self.save_weights(model_path)
             elif epoch - last_improvement_epoch > stop_after_no_improvement:
                 break
 
-        self.load(model_path)
+        self.load_weights(model_path)
+        log_df.to_csv(log_path, index=False)
 
         if verbose:
             print(f"\n\nTraining finished. Best result: {last_best_result:.3f} (epoch {last_improvement_epoch})")
 
+    @staticmethod
+    def load_logs(log_path):
+        return pd.read_csv(log_path)
 
+    @staticmethod
+    def load_logs_accuracy_losses_saves(log_path):
+        data_frame = pd.read_csv(log_path)
+        return data_frame["train_accuracy"].values, data_frame["validation_accuracy"].values, data_frame["train_loss"].values, data_frame["validation_loss"].values, data_frame["saved_during_training"].values
 
 
 
