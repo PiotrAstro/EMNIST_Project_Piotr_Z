@@ -22,7 +22,7 @@ class DataPreparation:
 
     def prepare_y(self, labels_path):
         labels = np.load(labels_path)
-        labels = labels.astype(np.long)
+        labels = labels.astype(np.int64)
         labels = np.argmax(labels, axis=1)
         return labels
 

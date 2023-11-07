@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 from torch import nn, functional
 from torch.utils.data import DataLoader, TensorDataset
+from torchsummary import summary
 
 
 class EMNIST_model:
@@ -34,6 +35,9 @@ class EMNIST_model:
             path = self.default_model_path
         if os.path.exists(path):
             self.model.load_state_dict(torch.load(path))
+
+    def show_summary(self, input_size=(1, 28, 28)):
+        summary(self.model, input_size=input_size)
 
     def predict(self, x, batch_size=0):
         if batch_size == 0:
@@ -97,7 +101,7 @@ class EMNIST_model:
             log_path = self.default_log_path
 
         train_size = len(x)
-        validation_size = len(y)
+        validation_size = len(validation_x)
         train_num_batches = int(ceil(train_size / batch_size))
         validation_num_batches = int(ceil(validation_size / batch_size))
 
